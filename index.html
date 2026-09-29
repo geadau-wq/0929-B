@@ -1,360 +1,395 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>N-2-13 鐘面的時刻動態探究工具</title>
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Pause, RotateCcw, Info, Settings } from 'lucide-react';
+
+export default function App() {
+  const [n1, setN1] = useState(6); // 圓形數量
+  const [n2, setN2] = useState(6); // 正方形數量
+  const [op, setOp] = useState(1); // 1 為按「形狀」分類, -1 為按「顏色」分類
+  const total = n1 + n2;
   
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React & ReactDOM UMD -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- Babel standalone for JSX processing -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  
-  <!-- Inter Font -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  
-  <style>
-    body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  const [t, setT] = useState(0); // 操作進度 t, 從 0 到 total
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playDir, setPlayDir] = useState(1);
+  const animationRef = useRef(null);
+
+  // 動態播放邏輯 (保留原有的連續播放與回彈機制)
+  useEffect(() => {
+    if (isPlaying) {
+      const animate = () => {
+        setT((prevT) => {
+          let nextT = prevT + playDir * 0.08; // 適合國小低年級觀察的速度
+          if (nextT >= total) {
+            setPlayDir(-1);
+            return total;
+          }
+          if (nextT <= 0) {
+            setPlayDir(1);
+            return 0;
+          }
+          return parseFloat(nextT.toFixed(2));
+        });
+        animationRef.current = requestAnimationFrame(animate);
+      };
+      animationRef.current = requestAnimationFrame(animate);
+    } else {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     }
-  </style>
-</head>
-<body class="bg-gray-100 antialiased">
-  <div id="root"></div>
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [isPlaying, playDir, total]);
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+  const handleReset = () => {
+    setT(0);
+    setIsPlaying(false);
+    setPlayDir(1);
+  };
 
-    const App = () => {
-      // 狀態變數設定
-      const [t, setT] = useState(0); // 動態撥動進度 0 ~ 10
-      const [a, setA] = useState(1); // 參數 a: 教學模式 (1: 幾時幾分/五個一數, 2: 兩整時之間的點數)
-      const [k, setK] = useState(3); // 參數 k: 起始整點 (1 ~ 12時)
-      const [h, setH] = useState(4); // 參數 h: 變動量 (Mode 1: 單位5分鐘, Mode 2: 經過小時)
-      const [isPlaying, setIsPlaying] = useState(false);
-      const animationRef = useRef(null);
+  const handleN1Change = (e) => {
+    let val = Number(e.target.value) || 0;
+    if (val < 1) val = 1;
+    if (val > 10) val = 10; // 限制單一形狀最大10個，總數最大20個
+    setN1(val);
+    handleReset();
+  };
 
-      const maxT = 10;
+  const handleN2Change = (e) => {
+    let val = Number(e.target.value) || 0;
+    if (val < 1) val = 1;
+    if (val > 10) val = 10;
+    setN2(val);
+    handleReset();
+  };
 
-      // 動態動畫控制 (撥動指針進程)
-      useEffect(() => {
-        if (isPlaying) {
-          let lastTime = performance.now();
-          const animate = (currentTime) => {
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
-            
-            setT((prevT) => {
-              const nextT = prevT + (deltaTime / 1000) * 2.5; // 每秒前進 2.5 單位
-              if (nextT >= maxT) {
-                setIsPlaying(false);
-                return maxT;
-              }
-              return nextT;
-            });
-            animationRef.current = requestAnimationFrame(animate);
-          };
-          animationRef.current = requestAnimationFrame(animate);
-        } else {
-          if (animationRef.current) cancelAnimationFrame(animationRef.current);
-        }
-        return () => {
-          if (animationRef.current) cancelAnimationFrame(animationRef.current);
-        };
-      }, [isPlaying]);
+  const handleOpChange = (e) => {
+    setOp(Number(e.target.value));
+    handleReset();
+  };
 
-      // 控制按鈕處理函數
-      const handlePlayPause = () => {
-        if (t >= maxT) setT(0);
-        setIsPlaying(!isPlaying);
-      };
+  // --- 產生所有積木的屬性與顏色配置 ---
+  // 為了讓分類有趣，我們將圓形與正方形各自交錯塗上紅色或藍色
+  const getItems = () => {
+    const items = [];
+    // 產生圓形
+    for (let i = 0; i < n1; i++) {
+      items.push({
+        id: `circle-${i}`,
+        type: 'circle',
+        color: i % 2 === 0 ? 'red' : 'blue',
+      });
+    }
+    // 產生正方形
+    for (let j = 0; j < n2; j++) {
+      items.push({
+        id: `square-${j}`,
+        type: 'square',
+        color: j % 2 === 0 ? 'blue' : 'red', // 與圓形交錯，增加視覺豐富度
+      });
+    }
+    return items;
+  };
 
-      const handleReset = () => {
-        setIsPlaying(false);
-        setT(0);
-      };
+  const items = getItems();
 
-      // --- 主圖形 SVG 鐘面坐標轉換 ---
-      const svgWidth = 600;
-      const svgHeight = 600;
-      const originX = 300; // 置中
-      const originY = 300; // 置中
+  // 計算紅色和藍色總數 (用於呈現說明)
+  const redCount = items.filter(item => item.color === 'red').length;
+  const blueCount = items.filter(item => item.color === 'blue').length;
 
-      // 計算當前時刻數值
-      let currentMinuteValue = 0;
-      let currentHourValue = k;
-      let currentHourOffset = 0;
+  // --- 格式化分類總結說明 ---
+  const formatClassification = (num1, num2, operation) => {
+    if (operation === 1) {
+      return `【依形狀】圓形：${num1} 個 ｜ 正方形：${num2} 個`;
+    } else {
+      return `【依顏色】紅色家族：${redCount} 個 ｜ 藍色家族：${blueCount} 個`;
+    }
+  };
 
-      if (a === 1) {
-        // 模式 1: 幾時幾分
-        const targetMinute = h * 5;
-        currentMinuteValue = (t / 10) * targetMinute;
-        currentHourValue = k + (currentMinuteValue / 60);
-      } else {
-        // 模式 2: 整點點數
-        currentHourOffset = (t / 10) * h;
-        currentHourValue = k + currentHourOffset;
-        currentMinuteValue = 0;
-      }
+  // --- 座標與分類區間運算 ---
+  const svgWidth = 400;
+  const svgHeight = 650;
 
-      // 取得日常語言溝通意義 (時鐘讀法)
-      const getColloquialText = () => {
-        if (a === 1) {
-          const displayMin = Math.round(currentMinuteValue);
-          const displayHour = Math.floor(currentHourValue) % 12 || 12;
-          return `${displayHour} 點 ${displayMin === 0 ? "鐘" : `${displayMin} 分`}`;
-        } else {
-          const startHr = k % 12 || 12;
-          const endHr = Math.floor(k + currentHourOffset) % 12 || 12;
-          return `從 ${startHr} 點到 ${endHr} 點，經過了 ${Math.floor(currentHourOffset)} 小時`;
-        }
-      };
+  // 計算未分類區 (下方) 積木的位置
+  const getUnsortedPos = (index) => {
+    const row = Math.floor(index / 5);
+    const col = index % 5;
+    return { x: 70 + col * 64, y: 490 + row * 55 };
+  };
 
-      // 決定當前撥動活動的狀態文字與顏色
-      const getStatus = () => {
-        if (t === 0) return { text: "準備進行鐘面撥動操作", color: "text-gray-600", icon: "○" };
-        if (t < maxT) return { text: a === 1 ? "正在撥動分針，觀察五個一數..." : "正在點數整點，觀察時針跳動...", color: "text-blue-500", icon: "➔" };
-        return { text: "操作完成！觀察最終指針位置", color: "text-red-500", icon: "●" };
-      };
+  // 計算分類盒 A (上方) 中第 idx 個積木的位置
+  const getBoxAPos = (idx) => {
+    const row = Math.floor(idx / 5);
+    const col = idx % 5;
+    return { x: 70 + col * 64, y: 110 + row * 55 };
+  };
 
-      const currentStatus = getStatus();
+  // 計算分類盒 B (中間) 中第 idx 個積木的位置
+  const getBoxBPos = (idx) => {
+    const row = Math.floor(idx / 5);
+    const col = idx % 5;
+    return { x: 70 + col * 64, y: 280 + row * 55 };
+  };
 
-      return (
-        <div className="min-h-screen bg-gray-100 p-4 font-sans text-gray-800">
-          <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-            
-            {/* Header - 課綱指標核心區域 */}
-            <div className="bg-emerald-600 text-white p-6">
-              <div className="flex justify-between items-start flex-wrap gap-2">
-                <div>
-                  <h1 className="text-2xl font-bold mb-2">N-2-13 鐘面的時刻動態探究工具</h1>
-                  <p className="text-emerald-100 text-lg">
-                    以操作活動為主。以鐘面時針與分針之位置認識「幾時幾分」。<br/>
-                    含兩整時時刻之間的整時點數（時間加減的前置經驗）。
-                  </p>
-                </div>
-                <span className="bg-emerald-800 text-white text-xl font-bold px-4 py-2 rounded-lg shadow-md border border-emerald-500 font-mono">
-                  n-I-9
-                </span>
-              </div>
-            </div>
+  // 繪製非正式的手繪感分類盒 (出自學生創意特色)
+  const renderCreativeFrame = (x, y, title, themeColor) => (
+    <g transform={`translate(${x}, ${y})`}>
+      <rect x="0" y="0" width="320" height="120" fill="white" stroke={themeColor} strokeWidth="3" strokeDasharray="6,4" rx="16" />
+      <rect x="15" y="-14" width="110" height="24" fill={themeColor} rx="6" />
+      <text x="70" y="3" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">{title}</text>
+    </g>
+  );
 
-            <div className="p-6 flex flex-col gap-6">
-              
-              {/* 上方：控制面板 */}
-              <div className="bg-white rounded-lg border-2 border-gray-200 p-5 shadow-sm w-full">
-                <div className="flex items-center justify-between mb-4 border-b pb-2">
-                  <h3 className="text-lg font-bold">互動控制與參數設定</h3>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={handlePlayPause}
-                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-semibold text-sm transition-colors"
-                    >
-                      {isPlaying ? (
-                        <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 暫停</>
-                      ) : (
-                        <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> {t >= maxT ? '重新演示' : '自動演示'}</>
-                      )}
-                    </button>
-                    <button 
-                      onClick={handleReset}
-                      className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-semibold text-sm transition-colors"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> 重置
-                    </button>
-                  </div>
-                </div>
+  // 決定當前操作狀態的提示文字
+  const getStatus = () => {
+    if (t === 0) return { text: "尚未開始分類，積木全混在一起", color: "text-blue-600", phase: 0 };
+    if (t === total) return { text: "分類完成！快看！一樣的積木能有不同分法喔！", color: "text-purple-600", phase: 3 };
+    
+    if (playDir === 1) {
+      return { text: "正在動手分類積木中...", color: "text-green-600", phase: 1 };
+    } else {
+      return { text: "正在重新整理積木...", color: "text-orange-500", phase: 2 };
+    }
+  };
 
-                {/* 三個參數調整拉桿 */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4 border-b pb-4 bg-gray-50 p-4 rounded-lg">
-                  <div>
-                    <div className="flex justify-between text-sm text-gray-700 font-semibold mb-1">
-                      <span>教學模式: {a === 1 ? "幾時幾分 (五個一數)" : "兩整點數 (經過時間)"}</span>
-                    </div>
-                    <input type="range" min="1" max="2" step="1" value={a} onChange={(e) => { setA(parseInt(e.target.value)); setIsPlaying(false); }} className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-emerald-600" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm text-gray-700 font-semibold mb-1">
-                      <span>起始時刻: {k} 點鐘</span>
-                    </div>
-                    <input type="range" min="1" max="12" step="1" value={k} onChange={(e) => { setK(parseInt(e.target.value)); setIsPlaying(false); }} className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-emerald-600" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm text-gray-700 font-semibold mb-1">
-                      <span>{a === 1 ? `目標分鐘: ${h * 5} 分` : `目標經過: ${h} 小時`}</span>
-                    </div>
-                    <input type="range" min="1" max="11" step="1" value={h} onChange={(e) => { setH(parseInt(e.target.value)); setIsPlaying(false); }} className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-emerald-600" />
-                  </div>
-                </div>
+  const status = getStatus();
 
-                {/* 撥動動態進度拉桿 */}
-                <div className="px-2">
-                  <div className="flex justify-between text-sm font-medium text-gray-600 mb-2">
-                    <span>操作起點</span>
-                    <span>撥動進程: <span className="text-emerald-600 text-lg font-bold">{(t * 10).toFixed(0)}%</span></span>
-                    <span>目標時刻</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="0.05"
-                    value={t}
-                    onChange={(e) => {
-                      setT(parseFloat(e.target.value));
-                      setIsPlaying(false);
-                    }}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                  />
-                </div>
-              </div>
+  // 預先統計每種模式下的分類計數，以利即時動畫插值定位
+  let currentGroupACount = 0;
+  let currentGroupBCount = 0;
 
-              {}
-              <div className="flex flex-col lg:flex-row gap-6">
-                
-                {/* 左側：主鐘面與指針動態 */}
-                <div className="w-full lg:w-2/3 flex flex-col">
-                  <h2 className="text-xl font-bold mb-4 border-b-2 border-emerald-500 pb-2">操作鐘面展示</h2>
-                  <div className="relative w-full aspect-square bg-[#f8fafc] rounded-lg border-2 border-gray-200 overflow-hidden shadow-inner flex items-center justify-center">
-                    <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-full max-w-[500px]">
-                      
-                      {/* 鐘面外框與底色 */}
-                      <circle cx={originX} cy={originY} r={210} fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="8" />
-                      <circle cx={originX} cy={originY} r={195} fill="#ffffff" stroke="#94a3b8" strokeWidth="2" />
+  return (
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50 font-sans">
+      
+      {/* 左側控制與解說面板 */}
+      <div className="w-full md:w-1/2 p-6 md:p-8 bg-white shadow-md flex flex-col gap-6 overflow-y-auto">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2 border-b-2 border-emerald-500 pb-2">
+            D-1-1 簡單分類操作演示
+          </h1>
+          <p className="text-gray-600 text-sm">以操作活動為主・學習多元分類模式</p>
+        </div>
 
-                      {/* 分鐘與小時刻度 */}
-                      {Array.from({ length: 60 }).map((_, i) => {
-                        const isHour = i % 5 === 0;
-                        return (
-                          <line
-                            key={`tick-${i}`}
-                            x1={originX} y1={originY - 195}
-                            x2={originX} y2={originY - (isHour ? 175 : 185)}
-                            stroke={isHour ? "#334155" : "#94a3b8"} 
-                            strokeWidth={isHour ? 4 : 2}
-                            transform={`rotate(${i * 6} ${originX} ${originY})`}
-                          />
-                        )
-                      })}
+        <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+          <h2 className="font-semibold text-emerald-800 mb-2 flex items-center gap-2">
+            <Info size={20} />
+            課綱對應說明
+          </h2>
+          <p className="text-gray-700 leading-relaxed text-sm mb-2">
+            <strong>核心目標：</strong>能蒐集、分類、記錄、呈現日常生活物品，報讀並說明已處理好的分類。
+          </p>
+          <p className="text-gray-700 leading-relaxed text-sm">
+            <strong>備註提醒：</strong>本條目強調「同一組資料可有不同的分類方式」。畫面右方分類框線特別採用「手繪虛線風格」，呼應課綱「說明圖表皆出自學生的創意，並非正式統計圖表」的特色教學。
+          </p>
+        </div>
 
-                      {/* 鐘面數字 (1-12) */}
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        const hour = i + 1;
-                        const angle = (hour * 30 - 90) * Math.PI / 180;
-                        const x = originX + 145 * Math.cos(angle);
-                        const y = originY + 145 * Math.sin(angle) + 12; // 垂直微調
-                        return <text key={`num-${hour}`} x={x} y={y} fontSize="34" fontWeight="900" textAnchor="middle" fill="#1e293b">{hour}</text>
-                      })}
+        {/* 互動控制區 */}
+        <div className="bg-gray-100 rounded-lg p-5 border border-gray-200 shadow-inner">
+          <div className="flex justify-between items-end mb-4">
+            <label className="font-bold text-gray-700">分類進度 (已分類個數):</label>
+            <span className="text-2xl font-mono font-bold text-emerald-600 bg-white px-3 py-1 rounded shadow-sm">
+              {Math.floor(t)} / {total}
+            </span>
+          </div>
+          
+          <input 
+            type="range" 
+            min="0" 
+            max={total} 
+            step="0.1" 
+            value={t} 
+            onChange={(e) => setT(parseFloat(e.target.value))}
+            className="w-full h-3 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-emerald-600 mb-6"
+          />
 
-                      {/* 模式1：五個一數/十個一數 輔助標示 (外圈) */}
-                      {a === 1 && Array.from({ length: 12 }).map((_, i) => {
-                        const minVal = (i + 1) * 5;
-                        // 只顯示當前進度已達到的分鐘數，加上微小容差避免閃爍
-                        if (minVal > currentMinuteValue + 0.1) return null; 
-                        const isTen = minVal % 10 === 0; // 區分五個一數與十個一數
-                        const angle = (minVal * 6 - 90) * Math.PI / 180;
-                        const x = originX + 245 * Math.cos(angle);
-                        const y = originY + 245 * Math.sin(angle) + 8;
-                        return (
-                          <g key={`min-text-${minVal}`}>
-                            <circle cx={x} cy={y-6} r={16} fill={isTen ? "#fef08a" : "#e0f2fe"} />
-                            <text x={x} y={y} fontSize="18" fontWeight="bold" fill={isTen ? "#ca8a04" : "#0284c7"} textAnchor="middle">
-                              {minVal}
-                            </text>
-                          </g>
-                        );
-                      })}
-
-                      {/* 模式2：整時點數 輔助標示 (跳動箭頭概念) */}
-                      {a === 2 && Array.from({ length: Math.floor(currentHourOffset) }).map((_, i) => {
-                        const hr = k + i + 0.5; // 在兩個小時中間顯示 +1
-                        const angle = (hr * 30 - 90) * Math.PI / 180;
-                        const x = originX + 240 * Math.cos(angle);
-                        const y = originY + 240 * Math.sin(angle) + 6;
-                        return (
-                          <text key={`jump-${i}`} x={x} y={y} fontSize="20" fontWeight="bold" fill="#ef4444" textAnchor="middle">
-                            +1
-                          </text>
-                        );
-                      })}
-
-                      {/* 鐘面時針 (粗短) */}
-                      <line
-                        x1={originX} y1={originY}
-                        x2={originX} y2={originY - 100}
-                        stroke="#1e3a8a" strokeWidth="10" strokeLinecap="round"
-                        transform={`rotate(${currentHourValue * 30} ${originX} ${originY})`}
-                      />
-                      
-                      {/* 鐘面分針 (細長) */}
-                      <line
-                        x1={originX} y1={originY}
-                        x2={originX} y2={originY - 165}
-                        stroke="#ef4444" strokeWidth="6" strokeLinecap="round"
-                        transform={`rotate(${currentMinuteValue * 6} ${originX} ${originY})`}
-                      />
-
-                      {/* 鐘面中心點 */}
-                      <circle cx={originX} cy={originY} r="10" fill="#0f172a" />
-                      <circle cx={originX} cy={originY} r="4" fill="#ffffff" />
-
-                    </svg>
-                  </div>
-                  
-                  {/* 課綱提醒字樣 */}
-                  <p className="text-sm text-gray-500 mt-2 text-center font-medium">
-                    藍色粗針為「時針」，紅色細針為「分針」。根據備註，本活動<span className="text-amber-600 font-bold">不含秒針教學</span>。
-                  </p>
-                </div>
-
-                {}
-                {/* 右側：即時數據與課綱概念對應 */}
-                <div className="w-full lg:w-1/3 flex flex-col gap-4 pt-0 lg:pt-12">
-                  
-                  {/* 日常語言與時鐘讀法 */}
-                  <div className="bg-emerald-50 rounded-lg p-5 border border-emerald-100">
-                    <div className="text-sm text-emerald-700 font-semibold mb-2">時鐘時刻與點數意義</div>
-                    <div className="text-2xl lg:text-3xl font-bold text-gray-800 break-all mb-3 text-emerald-900">
-                      {getColloquialText()}
-                    </div>
-                    <div className="text-sm text-emerald-600 border-t border-emerald-200 pt-2">
-                      對應指標：{a === 1 ? "認識「幾時幾分」" : "兩整時之間的整時點數"}
-                    </div>
-                  </div>
-
-                  {/* 狀態監控 */}
-                  <div className="bg-orange-50 rounded-lg p-5 border border-orange-100">
-                    <div className="text-sm text-orange-600 font-semibold mb-2">時針與分針的關係狀態</div>
-                    <div className="text-xl font-bold text-gray-800 flex items-center gap-3">
-                      <span className={currentStatus.color}>{currentStatus.text}</span>
-                      <span className={`text-2xl ${currentStatus.color}`}>{currentStatus.icon}</span>
-                    </div>
-                    <div className="mt-2 text-xs font-semibold text-gray-500">
-                      觀察分針走動時，時針也會跟著按比例緩慢移動。
-                    </div>
-                  </div>
-
-                  {/* 課綱嚴謹性提示卡片 */}
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 text-xs text-gray-600 space-y-1">
-                    <div className="font-bold text-gray-700 mb-1">💡 教學與備註核心：</div>
-                    <div>• 同時加強外圈的<span className="text-blue-600 font-bold">「五個一數」</span>與<span className="text-yellow-600 font-bold">「十個一數」</span>。</div>
-                    <div>• 本階段活動以操作為主，<span className="text-red-600 font-bold">不含秒針</span>教學。</div>
-                    <div>• 「兩整時時刻點數」作為後續時間加減的前置經驗，須配合鐘面實際撥動進行。</div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
+          <div className="flex gap-3 justify-center">
+            <button 
+              onClick={() => setIsPlaying(!isPlaying)}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-full font-medium transition shadow-md"
+            >
+              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+              {isPlaying ? "暫停" : "自動播放"}
+            </button>
+            <button 
+              onClick={handleReset}
+              className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-6 py-2 rounded-full font-medium transition shadow-sm"
+            >
+              <RotateCcw size={20} />
+              重置
+            </button>
           </div>
         </div>
-      );
-    };
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
-</body>
-</html>
+        {/* 觀察與解說區 */}
+        <div className="flex-1 flex flex-col gap-4">
+          <div className={`p-5 rounded-lg border-2 ${status.phase === 3 ? 'border-purple-400 bg-purple-50' : status.phase === 1 ? 'border-emerald-400 bg-emerald-50' : status.phase === 2 ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'} transition-colors duration-300`}>
+            <h3 className="font-bold text-gray-800 mb-2">當前操作狀態：</h3>
+            <p className={`text-2xl font-bold ${status.color} transition-colors duration-300`}>
+              {status.text}
+            </p>
+            {t !== 0 && (
+              <div className="mt-3 text-gray-600 font-mono text-sm bg-white/60 p-2 rounded inline-block">
+                已處理：紅色 = {items.slice(0, Math.floor(t)).filter(item=>item.color==='red').length} 個 ｜ 藍色 = {items.slice(0, Math.floor(t)).filter(item=>item.color==='blue').length} 個
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+            <h3 className="font-bold text-gray-800 mb-2">引導提問與觀察：</h3>
+            <ul className="list-disc pl-5 text-gray-700 space-y-2 text-sm">
+              <li><strong>同一堆物品：</strong>點選右上方「設定算式參數」切換不同的運算模式。</li>
+              <li>觀察<strong>「按形狀分類」</strong>與<strong>「按顏色分類」</strong>有什麼不一樣？</li>
+              <li>分類完成後，邀請孩子自己用話說說看：「我是怎麼分類的？紅色盒子裡有幾個積木？」</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* 右側圖形與自訂面板 */}
+      <div className="w-full md:w-1/2 bg-gray-200 p-4 md:p-8 flex flex-col items-center relative overflow-y-auto">
+        
+        {/* 自訂分類輸入區 */}
+        <div className="bg-white w-full max-w-[400px] p-5 rounded-xl shadow-md border border-gray-300 mb-4">
+          <h2 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 border-b pb-2">
+            <Settings size={18} className="text-gray-600" />
+            1. 設定積木參數與規則
+          </h2>
+          
+          <table className="w-full mb-4 text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-100 text-gray-700 text-sm">
+                <th className="py-2 px-4 border border-gray-200 font-medium w-1/2">參數</th>
+                <th className="py-2 px-4 border border-gray-200 font-medium">數量與模式</th>
+              </tr>
+            </thead>
+            <tbody className="text-lg font-mono">
+              <tr>
+                <td className="py-2 px-4 border border-gray-200 text-emerald-700 font-bold bg-emerald-50/30 text-center text-sm font-sans">
+                  圓形積木數<br/><span className="text-xs text-gray-500 font-normal">(1~10 個)</span>
+                </td>
+                <td className="py-1 px-2 border border-gray-200">
+                  <input type="number" min="1" max="10" value={n1} onChange={handleN1Change} className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 px-4 border border-gray-200 text-emerald-700 font-bold bg-emerald-50/30 text-center text-sm font-sans">
+                  正方形積木數<br/><span className="text-xs text-gray-500 font-normal">(1~10 個)</span>
+                </td>
+                <td className="py-1 px-2 border border-gray-200">
+                  <input type="number" min="1" max="10" value={n2} onChange={handleN2Change} className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 px-4 border border-gray-200 text-emerald-700 font-bold bg-emerald-50/30 text-center text-sm font-sans">
+                  分類規則
+                </td>
+                <td className="py-1 px-2 border border-gray-200">
+                  <select value={op} onChange={handleOpChange} className="w-full px-2 py-2 border border-gray-300 rounded text-base font-sans focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                    <option value={1}>按「形狀」分類</option>
+                    <option value={-1}>按「顏色」分類</option>
+                  </select>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="bg-emerald-50 text-emerald-900 p-3 rounded-lg border border-emerald-200 font-sans text-center shadow-inner">
+            <span className="text-xs text-emerald-600 block mb-1">目前分類統計：</span>
+            <span className="text-sm font-bold">{formatClassification(n1, n2, op)}</span>
+          </div>
+        </div>
+
+        {/* 圖形顯示區：分類盒與積木 */}
+        <div className="bg-[#f1f5f9] rounded-xl shadow-lg border border-gray-300 overflow-hidden relative w-full max-w-[400px]">
+          
+          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-auto">
+            <defs>
+              <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.2" />
+              </filter>
+            </defs>
+
+            {/* 背景與標題 */}
+            <rect x="0" y="0" width={svgWidth} height={svgHeight} fill="#f8fafc" />
+            <text x="200" y="45" textAnchor="middle" fill="#475569" fontSize="18" fontWeight="bold">我的分類操作台</text>
+
+            {/* 根據分類模式繪製不同的創意收納盒 */}
+            {op === 1 ? (
+              <>
+                {renderCreativeFrame(40, 70, "圓形圈圈盒子", "#3b82f6")}
+                {renderCreativeFrame(40, 240, "正方形框框盒子", "#0d9488")}
+              </>
+            ) : (
+              <>
+                {renderCreativeFrame(40, 70, "紅色物品家族", "#ef4444")}
+                {renderCreativeFrame(40, 240, "藍色物品家族", "#2563eb")}
+              </>
+            )}
+
+            {/* 未分類收集區 (下方) */}
+            <rect x="40" y="430" width="320" height="190" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="6,6" rx="12" />
+            <text x="200" y="460" textAnchor="middle" fill="#64748b" fontSize="15" fontWeight="bold">📦 待分類混合區</text>
+
+            {/* 繪製積木 */}
+            {items.map((item, i) => {
+              // 1. 計算該積木在目標分類中的相對排序索引 (確保動畫流暢)
+              let isGroupA = false;
+              if (op === 1) {
+                // 依形狀：圓形為 Group A，正方形為 Group B
+                isGroupA = item.type === 'circle';
+              } else {
+                // 依顏色：紅色為 Group A，藍色為 Group B
+                isGroupA = item.color === 'red';
+              }
+
+              let targetIdx = 0;
+              if (isGroupA) {
+                targetIdx = currentGroupACount;
+                currentGroupACount++;
+              } else {
+                targetIdx = currentGroupBCount;
+                currentGroupBCount++;
+              }
+
+              // 2. 決定動態起點與終點
+              const startPos = getUnsortedPos(i);
+              const targetPos = isGroupA ? getBoxAPos(targetIdx) : getBoxBPos(targetIdx);
+
+              // 3. 計算平移動畫插值
+              const p = Math.min(Math.max(t - i, 0), 1); // 每個積木逐一依進度t移動
+              const currentX = startPos.x + (targetPos.x - startPos.x) * p;
+              const currentY = startPos.y + (targetPos.y - startPos.y) * p;
+
+              // 4. 定義積木色彩樣式
+              const itemFill = item.color === 'red' ? '#ef4444' : '#3b82f6';
+              const itemStroke = item.color === 'red' ? '#b91c1c' : '#1d4ed8';
+
+              return (
+                <g key={item.id} transform={`translate(${currentX}, ${currentY})`} filter="url(#shadow)">
+                  {item.type === 'circle' ? (
+                    <circle cx="0" cy="0" r="20" fill={itemFill} stroke={itemStroke} strokeWidth="2" />
+                  ) : (
+                    <rect x="-18" y="-18" width="36" height="36" rx="4" fill={itemFill} stroke={itemStroke} strokeWidth="2" />
+                  )}
+                  {/* 立體亮點與可愛表情符號，增添童趣感 */}
+                  <circle cx="-5" cy="-5" r="4" fill="white" opacity="0.3" />
+                  <circle cx="-4" cy="2" r="1.5" fill="white" />
+                  <circle cx="4" cy="2" r="1.5" fill="white" />
+                  <path d="M -3 6 Q 0 9 3 6" stroke="white" strokeWidth="1.5" fill="none" />
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* 浮動提示框：當前分類數量看板 */}
+          {t !== 0 && t !== total && (
+            <div className="absolute top-4 left-4 bg-white/95 backdrop-blur px-4 py-2 rounded-lg shadow-md border border-emerald-200 text-sm">
+              <span className="text-gray-600 block text-xs mb-1">正在將第 {Math.ceil(t)} 個歸類...</span>
+              <div className="font-sans text-emerald-700 font-bold text-base">
+                目前進度：{Math.floor(t)} / {total}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
